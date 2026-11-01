@@ -1,0 +1,47 @@
+# Local stack: PostgreSQL + the API.
+#   docker compose up -d db      -> database only (run the API with npm run start:dev)
+#   docker compose up --build    -> database and API together
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-taskmanager}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-taskmanager}
+      POSTGRES_DB: ${DB_NAME:-taskmanager}
+    ports:
+      - '${DB_PORT:-5432}:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Creates the taskmanager_test database used by the e2e tests (first start only).
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_RUN_MIGRATIONS: 'true'
+      UPLOAD_DIR: /app/uploads
+    ports:
+      - '${PORT:-3000}:3000'
+    volumes:
+      - uploads:/app/uploads
+
+volumes:
+  pgdata:
+  uploads:
